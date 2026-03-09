@@ -1,0 +1,48 @@
+name: CD
+
+on:
+  push:
+    branches: [main, develop]
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to staging via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/vpnbot
+            git fetch --all
+            git checkout develop
+            git pull
+            docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+            docker compose -f docker-compose.staging.yml --env-file .env.staging exec -T app alembic upgrade head
+            curl -fsS https://staging.sokolrock.org:8443/health
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Deploy to production via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/vpnbot
+            git fetch --all
+            git checkout main
+            git pull
+            docker compose --env-file .env up -d --build
+            docker compose --env-file .env exec -T app alembic upgrade head
+            curl -fsS https://sokolrock.org/health

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: vpnbot
+          POSTGRES_USER: vpnbot
+          POSTGRES_PASSWORD: vpnbot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vpnbot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://vpnbot:vpnbot@localhost:5432/vpnbot
+      BOT_TOKEN: test
+      ADMIN_TELEGRAM_IDS: "1"
+      WEBHOOK_SHARED_SECRET: test
+      YOO_KASSA_SHOP_ID: test
+      YOO_KASSA_SECRET_KEY: test
+      YOO_KASSA_RETURN_URL: https://example.org
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+      - name: Ruff
+        run: ruff check app tests
+      - name: Mypy
+        run: mypy app
+      - name: Pytest
+        run: pytest -q
+      - name: Docker build
+        run: docker build -t vpnbot-ci:latest .
