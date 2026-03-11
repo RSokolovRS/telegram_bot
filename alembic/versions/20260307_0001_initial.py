@@ -7,6 +7,7 @@ Create Date: 2026-03-07 00:00:00
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "20260307_0001"
@@ -16,14 +17,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    server_status = sa.Enum("ACTIVE", "INACTIVE", name="serverstatus")
-    subscription_plan = sa.Enum("MONTH", "YEAR", name="subscriptionplan")
-    subscription_status = sa.Enum("ACTIVE", "EXPIRED", "CANCELED", name="subscriptionstatus")
-    payment_provider = sa.Enum("YOOKASSA", "CRYPTO", name="paymentprovider")
-    payment_status = sa.Enum("PENDING", "SUCCEEDED", "CANCELED", "FAILED", name="paymentstatus")
-    invoice_status = sa.Enum("CREATED", "PENDING", "PAID", "CANCELED", "EXPIRED", name="invoicestatus")
-    ticket_status = sa.Enum("OPEN", "CLOSED", name="ticketstatus")
-    ticket_author_role = sa.Enum("USER", "ADMIN", name="ticketauthorrole")
+    server_status = postgresql.ENUM("ACTIVE", "INACTIVE", name="serverstatus", create_type=False)
+    subscription_plan = postgresql.ENUM("MONTH", "YEAR", name="subscriptionplan", create_type=False)
+    subscription_status = postgresql.ENUM(
+        "ACTIVE", "EXPIRED", "CANCELED", name="subscriptionstatus", create_type=False
+    )
+    payment_provider = postgresql.ENUM("YOOKASSA", "CRYPTO", name="paymentprovider", create_type=False)
+    payment_status = postgresql.ENUM(
+        "PENDING", "SUCCEEDED", "CANCELED", "FAILED", name="paymentstatus", create_type=False
+    )
+    invoice_status = postgresql.ENUM(
+        "CREATED", "PENDING", "PAID", "CANCELED", "EXPIRED", name="invoicestatus", create_type=False
+    )
+    ticket_status = postgresql.ENUM("OPEN", "CLOSED", name="ticketstatus", create_type=False)
+    ticket_author_role = postgresql.ENUM("USER", "ADMIN", name="ticketauthorrole", create_type=False)
 
     bind = op.get_bind()
     server_status.create(bind, checkfirst=True)
