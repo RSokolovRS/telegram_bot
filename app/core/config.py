@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     base_url: str = "https://staging.sokolrock.org"
+    run_bot: bool = True
 
     bot_token: str
     admin_telegram_ids: list[int] = Field(default_factory=list)
@@ -26,6 +27,9 @@ class Settings(BaseSettings):
 
     sui_default_path_prefix: str = "/sub/"
     sui_request_timeout: int = 15
+    sui_panel_base_path: str = ""
+    sui_api_token: str = ""
+    sui_inbound_ids: str = ""
 
     yoo_kassa_shop_id: str
     yoo_kassa_secret_key: str
@@ -35,6 +39,8 @@ class Settings(BaseSettings):
     crypto_provider: str = "mock"
     crypto_test_mode: bool = True
     crypto_default_rate_rub: float = 95.0
+    crypto_bot_token: str = ""
+    crypto_bot_api_base: str = "https://pay.crypt.bot/api"
 
     trial_days: int = 3
     trial_grace_days: int = 1

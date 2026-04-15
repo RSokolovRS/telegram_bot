@@ -36,6 +36,21 @@ services:
       - certbot_conf:/etc/letsencrypt
     depends_on:
       - app
+      - s-ui
+    networks:
+      - backend
+
+  s-ui:
+    image: ${SUI_IMAGE}
+    container_name: vpnbot_sui_prod
+    restart: unless-stopped
+    expose:
+      - "2095"
+      - "2096"
+      - "28888"
+      - "28889"
+    volumes:
+      - sui_prod_data:/app/db
     networks:
       - backend
 
@@ -58,6 +73,7 @@ volumes:
   postgres_prod_data:
   certbot_www:
   certbot_conf:
+  sui_prod_data:
 
 networks:
   backend:

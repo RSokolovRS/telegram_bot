@@ -27,7 +27,10 @@ async def run_api() -> None:
 
 
 async def run_all() -> None:
-    await asyncio.gather(run_api(), run_bot())
+    tasks = [run_api()]
+    if settings.run_bot:
+        tasks.append(run_bot())
+    await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":

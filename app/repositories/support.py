@@ -42,9 +42,36 @@ class SupportRepository:
         )
         return list(result.scalars().all())
 
+    async def list_threads_by_user_id(self, user_id: int, limit: int = 5) -> list[TicketThread]:
+        result = await self.session.execute(
+            select(TicketThread)
+            .where(TicketThread.user_id == user_id)
+            .order_by(TicketThread.id.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_open_thread_by_user_id(self, user_id: int) -> TicketThread | None:
+        result = await self.session.execute(
+            select(TicketThread).where(
+                TicketThread.user_id == user_id,
+                TicketThread.status == TicketStatus.OPEN,
+            ).order_by(TicketThread.id.desc())
+        )
+        return result.scalar_one_or_none()
+
     async def get_thread(self, thread_id: int) -> TicketThread | None:
         result = await self.session.execute(select(TicketThread).where(TicketThread.id == thread_id))
         return result.scalar_one_or_none()
+
+    async def list_messages(self, thread_id: int, limit: int = 20) -> list[TicketMessage]:
+        result = await self.session.execute(
+            select(TicketMessage)
+            .where(TicketMessage.thread_id == thread_id)
+            .order_by(TicketMessage.id.desc())
+            .limit(limit)
+        )
+        return list(reversed(list(result.scalars().all())))
 
     async def close_thread(self, thread: TicketThread) -> None:
         thread.status = TicketStatus.CLOSED

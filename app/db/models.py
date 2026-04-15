@@ -74,6 +74,7 @@ class Server(Base):
     username: Mapped[str] = mapped_column(String(255))
     password: Mapped[str] = mapped_column(String(255))
     inbound_id: Mapped[int] = mapped_column(Integer)
+    inbound_ids: Mapped[str] = mapped_column(String(255), default="")
     status: Mapped[ServerStatus] = mapped_column(Enum(ServerStatus), default=ServerStatus.ACTIVE)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

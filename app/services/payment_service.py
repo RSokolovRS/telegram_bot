@@ -31,6 +31,7 @@ class PaymentService:
         server_id: int,
         plan: SubscriptionPlan,
     ) -> tuple[Invoice, str]:
+        raise RuntimeError("YooKassa is temporarily disabled")
         amount = self.plan_price(plan)
         idempotency_key = str(uuid4())
         result = await self.yookassa_client.create_payment(

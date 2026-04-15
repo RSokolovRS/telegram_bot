@@ -5,7 +5,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.bot.fsm.states import TrialFlow
-from app.dependencies import build_server_repository, build_trial_service, build_user_repository, session_provider
+from app.dependencies import (
+    build_billing_repository,
+    build_server_repository,
+    build_trial_service,
+    build_user_repository,
+    session_provider,
+)
 
 router = Router()
 
@@ -42,22 +48,30 @@ async def issue_trial(message: Message, state: FSMContext) -> None:
         if server is None:
             await message.answer("Сервер не найден.")
             return
+        user_id = user.id
+        server_db_id = server.id
 
         try:
             trial = await trial_service.issue_trial(
-                user_id=user.id,
+                user_id=user_id,
                 telegram_id=user.telegram_id,
-                server_id=server.id,
+                server_id=server_db_id,
                 server=server,
             )
+            account = await build_billing_repository(session).get_vpn_account(user_id, server_db_id)
             await session.commit()
+            link_part = f"\nСсылка для подключения:\n{account.subscription_url}" if account and account.subscription_url else ""
             await message.answer(
                 "Триал активирован на 3 дня. "
                 f"Окончание: {trial.ends_at:%Y-%m-%d %H:%M UTC}."
+                f"{link_part}"
             )
         except ValueError as exc:
             await session.rollback()
             await message.answer(str(exc))
+            account = await build_billing_repository(session).get_vpn_account(user_id, server_db_id)
+            if account and account.subscription_url:
+                await message.answer(f"Ваша текущая ссылка для подключения:\n{account.subscription_url}")
         except Exception:
             await session.rollback()
             await message.answer("Не удалось выдать триал. Попробуйте позже.")

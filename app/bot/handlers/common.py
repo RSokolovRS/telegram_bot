@@ -22,7 +22,7 @@ async def start_handler(message: Message) -> None:
 @router.message(lambda m: m.text == "ℹ️ Помощь")
 async def help_handler(message: Message) -> None:
     await message.answer(
-        "Доступные действия: пробный период, покупка подписки, поддержка. "
+        "Доступные действия: пробный период, покупка подписки, поддержка, мои обращения. "
         "Для админов: /tickets, /ticket_reply, /ticket_close"
     )
 

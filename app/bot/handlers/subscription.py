@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.fsm.states import PurchaseFlow
 from app.dependencies import (
+    build_billing_repository,
     build_payment_service,
     build_server_repository,
     build_subscription_service,
@@ -15,6 +16,28 @@ from app.dependencies import (
 from app.domain.enums import PaymentProvider, SubscriptionPlan
 
 router = Router()
+
+
+def _plan_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📅 Месяц", callback_data="purchase_plan:month"),
+                InlineKeyboardButton(text="🗓 Год", callback_data="purchase_plan:year"),
+            ]
+        ]
+    )
+
+
+def _provider_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="💎 CryptoBot", callback_data="purchase_provider:crypto"),
+                InlineKeyboardButton(text="💳 YooKassa", callback_data="purchase_provider:yookassa"),
+            ]
+        ]
+    )
 
 
 @router.message(F.text == "💳 Купить подписку")
@@ -37,17 +60,53 @@ async def purchase_server(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(server_id=int(message.text))
     await state.set_state(PurchaseFlow.choosing_plan)
-    await message.answer("Выберите план: month или year")
+    await message.answer("Выберите план:", reply_markup=_plan_keyboard())
+
+
+@router.callback_query(PurchaseFlow.choosing_plan, F.data.startswith("purchase_plan:"))
+async def purchase_plan_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    raw_plan = callback.data.split(":", maxsplit=1)[1]
+    if raw_plan not in {"month", "year"}:
+        await callback.answer("Некорректный план", show_alert=True)
+        return
+    await state.update_data(plan=raw_plan)
+    await state.set_state(PurchaseFlow.choosing_provider)
+    await callback.message.answer(
+        "Выберите провайдера оплаты:",
+        reply_markup=_provider_keyboard(),
+    )
+    await callback.answer()
 
 
 @router.message(PurchaseFlow.choosing_plan)
 async def purchase_plan(message: Message, state: FSMContext) -> None:
-    if message.text not in {"month", "year"}:
-        await message.answer("Введите month или year")
+    if message.text not in {"month", "year", "месяц", "год"}:
+        await message.answer("Нажмите кнопку: «📅 Месяц» или «🗓 Год».")
         return
-    await state.update_data(plan=message.text)
+    normalized_plan = "month" if message.text in {"month", "месяц"} else "year"
+    await state.update_data(plan=normalized_plan)
     await state.set_state(PurchaseFlow.choosing_provider)
-    await message.answer("Выберите провайдера оплаты: yookassa или crypto")
+    await message.answer(
+        "Выберите провайдера оплаты:",
+        reply_markup=_provider_keyboard(),
+    )
+
+
+@router.callback_query(PurchaseFlow.choosing_provider, F.data.startswith("purchase_provider:"))
+async def purchase_provider_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    provider_input = callback.data.split(":", maxsplit=1)[1].strip().lower()
+    if provider_input == "yookassa":
+        await callback.message.answer(
+            "YooKassa временно недоступна. Выберите, пожалуйста, 💎 CryptoBot.",
+            reply_markup=_provider_keyboard(),
+        )
+        await callback.answer()
+        return
+    if provider_input != "crypto":
+        await callback.answer("Некорректный провайдер", show_alert=True)
+        return
+    await callback.answer()
+    await _create_crypto_invoice_from_state(callback.message, state)
 
 
 @router.message(PurchaseFlow.choosing_provider)
@@ -55,10 +114,24 @@ async def purchase_provider(message: Message, state: FSMContext) -> None:
     if message.from_user is None or message.text is None:
         return
     provider_input = message.text.strip().lower()
-    if provider_input not in {"yookassa", "crypto"}:
-        await message.answer("Введите yookassa или crypto")
+    if provider_input == "yookassa":
+        await message.answer(
+            "YooKassa временно недоступна. Выберите, пожалуйста, 💎 CryptoBot.",
+            reply_markup=_provider_keyboard(),
+        )
         return
+    if provider_input not in {"crypto", "cryptobot", "💎 cryptobot"}:
+        await message.answer(
+            "Нажмите кнопку провайдера: 💎 CryptoBot или 💳 YooKassa.",
+            reply_markup=_provider_keyboard(),
+        )
+        return
+    await _create_crypto_invoice_from_state(message, state)
 
+
+async def _create_crypto_invoice_from_state(message: Message, state: FSMContext) -> None:
+    if message.from_user is None:
+        return
     data = await state.get_data()
     server_id = int(data["server_id"])
     plan = SubscriptionPlan.MONTH if data["plan"] == "month" else SubscriptionPlan.YEAR
@@ -75,23 +148,14 @@ async def purchase_provider(message: Message, state: FSMContext) -> None:
             await state.clear()
             return
 
-        if provider_input == PaymentProvider.YOOKASSA.value:
-            invoice, pay_url = await payment_service.create_yookassa_invoice(user.id, server.id, plan)
-            await session.commit()
-            await message.answer(
-                f"Счет создан: {invoice.provider_invoice_id}\n"
-                f"Сумма: {invoice.amount_rub} RUB\n"
-                f"Оплатить: {pay_url}"
-            )
-        else:
-            invoice, pay_url = await payment_service.create_crypto_invoice(user.id, server.id, plan)
-            await session.commit()
-            await message.answer(
-                f"Crypto счет: {invoice.provider_invoice_id}\n"
-                f"Сумма к оплате: {invoice.amount_due_provider}\n"
-                f"Курс зафиксирован: {invoice.locked_rate}\n"
-                f"Оплатить: {pay_url}"
-            )
+        invoice, pay_url = await payment_service.create_crypto_invoice(user.id, server.id, plan)
+        await session.commit()
+        await message.answer(
+            f"Crypto счет: {invoice.provider_invoice_id}\n"
+            f"Сумма к оплате: {invoice.amount_due_provider}\n"
+            f"Курс зафиксирован: {invoice.locked_rate}\n"
+            f"Оплатить: {pay_url}"
+        )
         await state.clear()
         break
 
@@ -113,4 +177,7 @@ async def my_subscription(message: Message) -> None:
             f"План: {sub.plan.value}\n"
             f"Активна до: {sub.ends_at:%Y-%m-%d %H:%M UTC}"
         )
+        accounts = await build_billing_repository(session).list_active_accounts_by_user(user.id)
+        if accounts and accounts[0].subscription_url:
+            await message.answer(f"Ссылка для подключения:\n{accounts[0].subscription_url}")
         break
